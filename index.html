@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>3D Editor with Light Control</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #toolbar {
+            position: absolute;
+            padding: 10px;
+            background: rgba(200, 200, 200, 0.8);
+            border-radius: 5px;
+            margin: 10px;
+            width: 300px;
+            top: 40px;
+        }
+        .control-group { margin: 10px 0; }
+        canvas { cursor: crosshair; }
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .slider-container input[type="range"] {
+            flex-grow: 1;
+        }
+        .slider-container input[type="number"] {
+            width: 60px;
+        }
+        .accordion {
+            background-color: rgba(180, 180, 180, 0.6);
+            color: #444;
+            cursor: pointer;
+            padding: 8px;
+            width: 100%;
+            border: none;
+            text-align: left;
+            outline: none;
+            font-size: 14px;
+            transition: 0.4s;
+            border-radius: 3px;
+            margin-top: 5px;
+        }
+        .accordion:hover {
+            background-color: rgba(160, 160, 160, 0.8);
+        }
+        .accordion:after {
+            content: '\25BC';
+            font-size: 12px;
+            color: #777;
+            float: right;
+            margin-left: 5px;
+        }
+        .active:after {
+            content: '\25B2';
+        }
+        .panel {
+            padding: 0 10px;
+            background-color: rgba(220, 220, 220, 0.6);
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.2s ease-out;
+            border-radius: 0 0 3px 3px;
+        }
+        .basic-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+        .basic-controls button {
+            flex: 1;
+            min-width: 80px;
+        }
+        /* File menu styles */
+        #menu-bar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background: rgba(180, 180, 180, 0.8);
+            padding: 5px 10px;
+            z-index: 100;
+        }
+        .menu {
+            position: relative;
+            display: inline-block;
+        }
+        .menu-btn {
+            background: none;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        .menu-btn:hover {
+            background: rgba(200, 200, 200, 0.8);
+        }
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            background-color: rgba(240, 240, 240, 0.9);
+            min-width: 160px;
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+            z-index: 1;
+        }
+        .dropdown-content a {
+            color: black;
+            padding: 8px 12px;
+            text-decoration: none;
+            display: block;
+        }
+        .dropdown-content a:hover {
+            background-color: rgba(200, 200, 200, 0.8);
+        }
+        .menu:hover .dropdown-content {
+            display: block;
+        }
+        .light-helper {
+            width: 0.2rem;
+            height: 0.2rem;
+            background-color: yellow;
+            position: absolute;
+            border-radius: 50%;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="menu-bar">
+        <div class="menu">
+            <button class="menu-btn">File</button>
+            <div class="dropdown-content">
+                <a href="#" onclick="saveAs()">Save As</a>
+                <a href="#" onclick="openFile()">Open</a>
+                <a href="#" onclick="saveFile()">Save</a>
+                <a href="#" onclick="newFile()">New</a>
+            </div>
+        </div>
+    </div>
+
+    <div id="toolbar">
+        <div class="basic-controls">
+            <button onclick="addCube()">Add Cube</button>
+            <button onclick="addSphere()">Add Sphere</button>
+            <button onclick="addCylinder()">Add Cylinder</button>
+            <button onclick="deleteSelected()">Delete</button>
+            <button onclick="resetScene()">Reset</button>
+        </div>
+
+        <button class="accordion">Color Settings</button>
+        <div class="panel">
+            <div class="control-group">
+                <label>Color: <input type="color" id="colorPicker"></label>
+                <button onclick="toggleWireframe()">Toggle Wireframe</button>
+            </div>
+        </div>
+
+        <button class="accordion">Position Settings</button>
+        <div class="panel">
+            <div class="control-group">
+                <label>Position X:</label>
+                <div class="slider-container">
+                    <input type="range" id="posX" min="-10" max="10" step="0.1">
+                    <input type="number" id="posXValue" min="-10" max="10" step="0.1">
+                </div>
+                <label>Position Y:</label>
+                <div class="slider-container">
+                    <input type="range" id="posY" min="-10" max="10" step="0.1">
+                    <input type="number" id="posYValue" min="-10" max="10" step="0.1">
+                </div>
+                <label>Position Z:</label>
+                <div class="slider-container">
+                    <input type="range" id="posZ" min="-10" max="10" step="0.1">
+                    <input type="number" id="posZValue" min="-10" max="10" step="0.1">
+                </div>
+            </div>
+        </div>
+
+        <button class="accordion">Scale Settings</button>
+        <div class="panel">
+            <div class="control-group">
+                <label>Scale X:</label>
+                <div class="slider-container">
+                    <input type="range" id="scaleX" min="0.1" max="5" step="0.1">
+                    <input type="number" id="scaleXValue" min="0.1" max="5" step="0.1">
+                </div>
+                <label>Scale Y:</label>
+                <div class="slider-container">
+                    <input type="range" id="scaleY" min="0.1" max="5" step="0.1">
+                    <input type="number" id="scaleYValue" min="0.1" max="5" step="0.1">
+                </div>
+                <label>Scale Z:</label>
+                <div class="slider-container">
+                    <input type="range" id="scaleZ" min="0.1" max="5" step="0.1">
+                    <input type="number" id="scaleZValue" min="0.1" max="5" step="0.1">
+                </div>
+            </div>
+        </div>
+
+        <button class="accordion">Light Settings</button>
+        <div class="panel">
+            <div class="control-group">
+                <label>Light Type:</label>
+                <select id="lightType" onchange="changeLightType()">
+                    <option value="directional">Directional Light</option>
+                    <option value="ambient">Ambient Light</option>
+                    <option value="both">Both</option>
+                </select>
+            </div>
+            <div class="control-group" id="directionalLightControls">
+                <label>Directional Light Position:</label>
+                <div class="slider-container">
+                    <label>X:</label>
+                    <input type="range" id="lightPosX" min="-20" max="20" step="0.5">
+                    <input type="number" id="lightPosXValue" min="-20" max="20" step="0.5">
+                </div>
+                <div class="slider-container">
+                    <label>Y:</label>
+                    <input type="range" id="lightPosY" min="-20" max="20" step="0.5">
+                    <input type="number" id="lightPosYValue" min="-20" max="20" step="0.5">
+                </div>
+                <div class="slider-container">
+                    <label>Z:</label>
+                    <input type="range" id="lightPosZ" min="-20" max="20" step="0.5">
+                    <input type="number" id="lightPosZValue" min="-20" max="20" step="0.5">
+                </div>
+                <div class="slider-container">
+                    <label>Intensity:</label>
+                    <input type="range" id="lightIntensity" min="0" max="2" step="0.1">
+                    <input type="number" id="lightIntensityValue" min="0" max="2" step="0.1">
+                </div>
+                <div class="slider-container">
+                    <label>Color:</label>
+                    <input type="color" id="lightColor" value="#ffffff">
+                </div>
+            </div>
+            <div class="control-group" id="ambientLightControls">
+                <label>Ambient Light:</label>
+                <div class="slider-container">
+                    <label>Intensity:</label>
+                    <input type="range" id="ambientIntensity" min="0" max="2" step="0.1">
+                    <input type="number" id="ambientIntensityValue" min="0" max="2" step="0.1">
+                </div>
+                <div class="slider-container">
+                    <label>Color:</label>
+                    <input type="color" id="ambientColor" value="#404040">
+                </div>
+            </div>
+        </div>
+
+        <button class="accordion">Display Settings</button>
+        <div class="panel">
+            <div class="control-group">
+                <label><input type="checkbox" id="frameToggle"> Show Wireframe</label>
+            </div>
+        </div>
+    </div>
+
+    <div id="lightHelper" class="light-helper"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script>
+        let scene, camera, renderer, controls;
+        let selectedObject = null;
+        let frameHelpers = [];
+        let currentFileName = null;
+        let directionalLight, ambientLight;
+        let lightHelper;
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // Initialize lights
+            directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(5, 5, 5);
+            scene.add(directionalLight);
+
+            ambientLight = new THREE.AmbientLight(0x404040);
+            scene.add(ambientLight);
+
+            // Light helper
+            lightHelper = document.getElementById('lightHelper');
+            updateLightHelperPosition();
+
+            const gridHelper = new THREE.GridHelper(20, 20);
+            scene.add(gridHelper);
+
+            camera.position.set(10, 10, 10);
+            camera.lookAt(0, 0, 0);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.screenSpacePanning = false;
+            controls.minDistance = 1;
+            controls.maxDistance = 100;
+            controls.target.set(0, 0, 0);
+            controls.update();
+
+            // Initialize accordion
+            const acc = document.getElementsByClassName("accordion");
+            for (let i = 0; i < acc.length; i++) {
+                acc[i].addEventListener("click", function() {
+                    this.classList.toggle("active");
+                    const panel = this.nextElementSibling;
+                    if (panel.style.maxHeight) {
+                        panel.style.maxHeight = null;
+                    } else {
+                        panel.style.maxHeight = panel.scrollHeight + "px";
+                    } 
+                });
+                acc[i].nextElementSibling.style.maxHeight = null;
+            }
+
+            // Initialize light controls
+            document.getElementById('lightPosX').addEventListener('input', function() {
+                document.getElementById('lightPosXValue').value = this.value;
+                updateLightPosition();
+            });
+            document.getElementById('lightPosXValue').addEventListener('input', function() {
+                document.getElementById('lightPosX').value = this.value;
+                updateLightPosition();
+            });
+            
+            document.getElementById('lightPosY').addEventListener('input', function() {
+                document.getElementById('lightPosYValue').value = this.value;
+                updateLightPosition();
+            });
+            document.getElementById('lightPosYValue').addEventListener('input', function() {
+                document.getElementById('lightPosY').value = this.value;
+                updateLightPosition();
+            });
+            
+            document.getElementById('lightPosZ').addEventListener('input', function() {
+                document.getElementById('lightPosZValue').value = this.value;
+                updateLightPosition();
+            });
+            document.getElementById('lightPosZValue').addEventListener('input', function() {
+                document.getElementById('lightPosZ').value = this.value;
+                updateLightPosition();
+            });
+            
+            document.getElementById('lightIntensity').addEventListener('input', function() {
+                document.getElementById('lightIntensityValue').value = this.value;
+                updateLightSettings();
+            });
+            document.getElementById('lightIntensityValue').addEventListener('input', function() {
+                document.getElementById('lightIntensity').value = this.value;
+                updateLightSettings();
+            });
+            
+            document.getElementById('lightColor').addEventListener('input', function() {
+                updateLightSettings();
+            });
+            
+            document.getElementById('ambientIntensity').addEventListener('input', function() {
+                document.getElementById('ambientIntensityValue').value = this.value;
+                updateLightSettings();
+            });
+            document.getElementById('ambientIntensityValue').addEventListener('input', function() {
+                document.getElementById('ambientIntensity').value = this.value;
+                updateLightSettings();
+            });
+            
+            document.getElementById('ambientColor').addEventListener('input', function() {
+                updateLightSettings();
+            });
+
+            // Set initial light values
+            document.getElementById('lightPosX').value = 5;
+            document.getElementById('lightPosXValue').value = 5;
+            document.getElementById('lightPosY').value = 5;
+            document.getElementById('lightPosYValue').value = 5;
+            document.getElementById('lightPosZ').value = 5;
+            document.getElementById('lightPosZValue').value = 5;
+            document.getElementById('lightIntensity').value = 1;
+            document.getElementById('lightIntensityValue').value = 1;
+            document.getElementById('ambientIntensity').value = 0.4;
+            document.getElementById('ambientIntensityValue').value = 0.4;
+
+            document.getElementById('colorPicker').addEventListener('input', updateColor);
+            
+            // Position sliders and number inputs
+            document.getElementById('posX').addEventListener('input', function() {
+                document.getElementById('posXValue').value = this.value;
+                updatePosition();
+            });
+            document.getElementById('posXValue').addEventListener('input', function() {
+                document.getElementById('posX').value = this.value;
+                updatePosition();
+            });
+            
+            document.getElementById('posY').addEventListener('input', function() {
+                document.getElementById('posYValue').value = this.value;
+                updatePosition();
+            });
+            document.getElementById('posYValue').addEventListener('input', function() {
+                document.getElementById('posY').value = this.value;
+                updatePosition();
+            });
+            
+            document.getElementById('posZ').addEventListener('input', function() {
+                document.getElementById('posZValue').value = this.value;
+                updatePosition();
+            });
+            document.getElementById('posZValue').addEventListener('input', function() {
+                document.getElementById('posZ').value = this.value;
+                updatePosition();
+            });
+            
+            // Scale sliders and number inputs
+            document.getElementById('scaleX').addEventListener('input', function() {
+                document.getElementById('scaleXValue').value = this.value;
+                updateScale();
+            });
+            document.getElementById('scaleXValue').addEventListener('input', function() {
+                document.getElementById('scaleX').value = this.value;
+                updateScale();
+            });
+            
+            document.getElementById('scaleY').addEventListener('input', function() {
+                document.getElementById('scaleYValue').value = this.value;
+                updateScale();
+            });
+            document.getElementById('scaleYValue').addEventListener('input', function() {
+                document.getElementById('scaleY').value = this.value;
+                updateScale();
+            });
+            
+            document.getElementById('scaleZ').addEventListener('input', function() {
+                document.getElementById('scaleZValue').value = this.value;
+                updateScale();
+            });
+            document.getElementById('scaleZValue').addEventListener('input', function() {
+                document.getElementById('scaleZ').value = this.value;
+                updateScale();
+            });
+            
+            document.getElementById('frameToggle').addEventListener('change', updateFrames);
+
+            renderer.domElement.addEventListener('click', onCanvasClick);
+
+            animate();
+        }
+
+        function updateLightHelperPosition() {
+            const vector = new THREE.Vector3();
+            vector.setFromMatrixPosition(directionalLight.matrixWorld);
+            vector.project(camera);
+            
+            const x = (vector.x * 0.5 + 0.5) * renderer.domElement.clientWidth;
+            const y = (vector.y * -0.5 + 0.5) * renderer.domElement.clientHeight;
+            
+            lightHelper.style.left = `${x}px`;
+            lightHelper.style.top = `${y}px`;
+        }
+
+        function updateLightPosition() {
+            directionalLight.position.set(
+                parseFloat(document.getElementById('lightPosX').value),
+                parseFloat(document.getElementById('lightPosY').value),
+                parseFloat(document.getElementById('lightPosZ').value)
+            );
+            updateLightHelperPosition();
+        }
+
+        function updateLightSettings() {
+            // Directional light settings
+            directionalLight.intensity = parseFloat(document.getElementById('lightIntensity').value);
+            directionalLight.color.set(document.getElementById('lightColor').value);
+            
+            // Ambient light settings
+            ambientLight.intensity = parseFloat(document.getElementById('ambientIntensity').value);
+            ambientLight.color.set(document.getElementById('ambientColor').value);
+        }
+
+        function changeLightType() {
+            const type = document.getElementById('lightType').value;
+            
+            switch(type) {
+                case 'directional':
+                    directionalLight.visible = true;
+                    ambientLight.visible = false;
+                    document.getElementById('directionalLightControls').style.display = 'block';
+                    document.getElementById('ambientLightControls').style.display = 'none';
+                    break;
+                case 'ambient':
+                    directionalLight.visible = false;
+                    ambientLight.visible = true;
+                    document.getElementById('directionalLightControls').style.display = 'none';
+                    document.getElementById('ambientLightControls').style.display = 'block';
+                    break;
+                case 'both':
+                    directionalLight.visible = true;
+                    ambientLight.visible = true;
+                    document.getElementById('directionalLightControls').style.display = 'block';
+                    document.getElementById('ambientLightControls').style.display = 'block';
+                    break;
+            }
+        }
+
+        // File operations
+        function saveAs() {
+            const sceneData = serializeScene();
+            const blob = new Blob([JSON.stringify(sceneData)], { type: 'application/json' });
+            const fileName = prompt("Enter file name:", "scene.json") || "scene.json";
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            currentFileName = fileName;
+        }
+
+        function saveFile() {
+            if (!currentFileName) {
+                saveAs();
+                return;
+            }
+            
+            const sceneData = serializeScene();
+            const blob = new Blob([JSON.stringify(sceneData)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = currentFileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function openFile() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            
+            input.onchange = e => {
+                const file = e.target.files[0];
+                currentFileName = file.name;
+                
+                const reader = new FileReader();
+                reader.onload = event => {
+                    const sceneData = JSON.parse(event.target.result);
+                    deserializeScene(sceneData);
+                };
+                reader.readAsText(file);
+            };
+            
+            input.click();
+        }
+
+        function newFile() {
+            resetScene();
+            currentFileName = null;
+        }
+
+        function serializeScene() {
+            const objects = [];
+            
+            scene.children.forEach(obj => {
+                if (obj.isMesh) {
+                    const objectData = {
+                        type: obj.geometry.type,
+                        position: { x: obj.position.x, y: obj.position.y, z: obj.position.z },
+                        scale: { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z },
+                        color: obj.material.color.getHex(),
+                        wireframe: obj.material.wireframe
+                    };
+                    
+                    objects.push(objectData);
+                }
+            });
+            
+            return {
+                version: '1.0',
+                objects: objects,
+                lights: {
+                    directional: {
+                        position: {
+                            x: directionalLight.position.x,
+                            y: directionalLight.position.y,
+                            z: directionalLight.position.z
+                        },
+                        color: directionalLight.color.getHex(),
+                        intensity: directionalLight.intensity
+                    },
+                    ambient: {
+                        color: ambientLight.color.getHex(),
+                        intensity: ambientLight.intensity
+                    },
+                    lightType: document.getElementById('lightType').value
+                }
+            };
+        }
+
+        function deserializeScene(data) {
+            resetScene();
+            
+            // Add objects
+            data.objects.forEach(objData => {
+                let geometry;
+                
+                switch(objData.type) {
+                    case 'BoxGeometry':
+                        geometry = new THREE.BoxGeometry(1, 1, 1);
+                        break;
+                    case 'SphereGeometry':
+                        geometry = new THREE.SphereGeometry(0.5, 32, 32);
+                        break;
+                    case 'CylinderGeometry':
+                        geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 32);
+                        break;
+                    default:
+                        console.warn('Unknown geometry type:', objData.type);
+                        return;
+                }
+                
+                const material = new THREE.MeshPhongMaterial({
+                    color: objData.color,
+                    wireframe: objData.wireframe
+                });
+                
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.position.set(objData.position.x, objData.position.y, objData.position.z);
+                mesh.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
+                
+                scene.add(mesh);
+            });
+            
+            // Set lights
+            if (data.lights) {
+                directionalLight.position.set(
+                    data.lights.directional.position.x,
+                    data.lights.directional.position.y,
+                    data.lights.directional.position.z
+                );
+                directionalLight.color.setHex(data.lights.directional.color);
+                directionalLight.intensity = data.lights.directional.intensity;
+                
+                ambientLight.color.setHex(data.lights.ambient.color);
+                ambientLight.intensity = data.lights.ambient.intensity;
+                
+                document.getElementById('lightType').value = data.lights.lightType || 'both';
+                changeLightType();
+                
+                // Update UI controls
+                document.getElementById('lightPosX').value = directionalLight.position.x;
+                document.getElementById('lightPosXValue').value = directionalLight.position.x;
+                document.getElementById('lightPosY').value = directionalLight.position.y;
+                document.getElementById('lightPosYValue').value = directionalLight.position.y;
+                document.getElementById('lightPosZ').value = directionalLight.position.z;
+                document.getElementById('lightPosZValue').value = directionalLight.position.z;
+                document.getElementById('lightIntensity').value = directionalLight.intensity;
+                document.getElementById('lightIntensityValue').value = directionalLight.intensity;
+                document.getElementById('lightColor').value = `#${directionalLight.color.getHexString()}`;
+                document.getElementById('ambientIntensity').value = ambientLight.intensity;
+                document.getElementById('ambientIntensityValue').value = ambientLight.intensity;
+                document.getElementById('ambientColor').value = `#${ambientLight.color.getHexString()}`;
+            }
+            
+            if (data.objects.length > 0) {
+                selectedObject = scene.children.find(obj => obj.isMesh);
+                updateControls();
+            }
+        }
+
+        function addCube() {
+            const geometry = new THREE.BoxGeometry(1, 1, 1);
+            const material = new THREE.MeshPhongMaterial({ color: 0x00ff00 });
+            const cube = new THREE.Mesh(geometry, material);
+            scene.add(cube);
+            selectedObject = cube;
+            updateFrames();
+            updateControls();
+        }
+
+        function addSphere() {
+            const geometry = new THREE.SphereGeometry(0.5, 32, 32);
+            const material = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+            const sphere = new THREE.Mesh(geometry, material);
+            scene.add(sphere);
+            selectedObject = sphere;
+            updateFrames();
+            updateControls();
+        }
+
+        function addCylinder() {
+            const geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 32);
+            const material = new THREE.MeshPhongMaterial({ color: 0x0000ff });
+            const cylinder = new THREE.Mesh(geometry, material);
+            scene.add(cylinder);
+            selectedObject = cylinder;
+            updateFrames();
+            updateControls();
+        }
+
+        function updateColor(e) {
+            if (selectedObject) {
+                selectedObject.material.color.set(e.target.value);
+            }
+        }
+
+        function updatePosition() {
+            if (selectedObject) {
+                selectedObject.position.x = document.getElementById('posX').value;
+                selectedObject.position.y = document.getElementById('posY').value;
+                selectedObject.position.z = document.getElementById('posZ').value;
+            }
+        }
+
+        function updateScale() {
+            if (selectedObject) {
+                selectedObject.scale.x = document.getElementById('scaleX').value;
+                selectedObject.scale.y = document.getElementById('scaleY').value;
+                selectedObject.scale.z = document.getElementById('scaleZ').value;
+            }
+        }
+
+        function updateFrames() {
+            frameHelpers.forEach(f => f.parent && f.parent.remove(f));
+            frameHelpers = [];
+
+            if (document.getElementById('frameToggle').checked) {
+                scene.children.forEach(obj => {
+                    if (obj.isMesh) {
+                        const edges = new THREE.EdgesGeometry(obj.geometry);
+                        const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x000000 }));
+                        line.name = "edgeHelper";
+                        obj.add(line);
+                        frameHelpers.push(line);
+                    }
+                });
+            }
+        }
+
+        function onCanvasClick(event) {
+            const mouse = new THREE.Vector2();
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(mouse, camera);
+
+            const intersects = raycaster.intersectObjects(scene.children);
+            if (intersects.length > 0) {
+                selectedObject = intersects[0].object;
+                updateControls();
+            }
+        }
+
+        function updateControls() {
+            if (selectedObject) {
+                document.getElementById('posX').value = selectedObject.position.x;
+                document.getElementById('posXValue').value = selectedObject.position.x;
+                document.getElementById('posY').value = selectedObject.position.y;
+                document.getElementById('posYValue').value = selectedObject.position.y;
+                document.getElementById('posZ').value = selectedObject.position.z;
+                document.getElementById('posZValue').value = selectedObject.position.z;
+                
+                document.getElementById('scaleX').value = selectedObject.scale.x;
+                document.getElementById('scaleXValue').value = selectedObject.scale.x;
+                document.getElementById('scaleY').value = selectedObject.scale.y;
+                document.getElementById('scaleYValue').value = selectedObject.scale.y;
+                document.getElementById('scaleZ').value = selectedObject.scale.z;
+                document.getElementById('scaleZValue').value = selectedObject.scale.z;
+                
+                document.getElementById('colorPicker').value = `#${selectedObject.material.color.getHexString()}`;
+            }
+        }
+
+        function deleteSelected() {
+            if (selectedObject) {
+                if (selectedObject.children.length > 0) {
+                    selectedObject.children.forEach(child => {
+                        if (child.name === "edgeHelper") {
+                            selectedObject.remove(child);
+                        }
+                    });
+                }
+                scene.remove(selectedObject);
+                selectedObject = null;
+                updateFrames();
+            }
+        }
+
+        function toggleWireframe() {
+            if (selectedObject) {
+                selectedObject.material.wireframe = !selectedObject.material.wireframe;
+            }
+        }
+
+        function resetScene() {
+  // 1) Mesh と LineSegments (エッジヘルパー) をまとめて削除  
+  scene.children.slice().forEach(obj => {
+    if (obj.isMesh || obj.type === "LineSegments") {
+      scene.remove(obj);
+    }
+  });
+
+  // 選択オブジェクトをリセット  
+  selectedObject = null;
+
+  // フレームヘルパー配列もクリア  
+  frameHelpers.forEach(helper => {
+    if (helper.parent) helper.parent.remove(helper);
+  });
+  frameHelpers = [];
+
+  // 2) 古い GridHelper を全部削除  
+  scene.children.slice().forEach(obj => {
+    if (obj instanceof THREE.GridHelper) {
+      scene.remove(obj);
+    }
+  });
+
+  // 新規にグリッドを追加  
+  const gridHelper = new THREE.GridHelper(20, 20);
+  scene.add(gridHelper);
+
+  // 3) ライトをデフォルト値に戻す  
+  directionalLight.position.set(5, 5, 5);
+  directionalLight.color.set(0xffffff);
+  directionalLight.intensity = 1;
+
+  ambientLight.color.set(0x404040);
+  ambientLight.intensity = 0.4;
+
+  // UI 側のライト設定も初期化  
+  document.getElementById('lightType').value = 'both';
+  changeLightType();
+
+  ['X','Y','Z'].forEach(axis => {
+    document.getElementById(`lightPos${axis}`).value = 5;
+    document.getElementById(`lightPos${axis}Value`).value = 5;
+  });
+  document.getElementById('lightIntensity').value = 1;
+  document.getElementById('lightIntensityValue').value = 1;
+  document.getElementById('lightColor').value = '#ffffff';
+  document.getElementById('ambientIntensity').value = 0.4;
+  document.getElementById('ambientIntensityValue').value = 0.4;
+  document.getElementById('ambientColor').value = '#404040';
+}
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+            updateLightHelperPosition();
+        }
+
+        init();
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
