@@ -122,6 +122,9 @@
             border-radius: 50%;
             pointer-events: none;
         }
+        .text-controls {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -142,6 +145,7 @@
             <button onclick="addCube()">Add Cube</button>
             <button onclick="addSphere()">Add Sphere</button>
             <button onclick="addCylinder()">Add Cylinder</button>
+            <button onclick="addText()">Add Text</button>
             <button onclick="deleteSelected()">Delete</button>
             <button onclick="resetScene()">Reset</button>
         </div>
@@ -151,6 +155,38 @@
             <div class="control-group">
                 <label>Color: <input type="color" id="colorPicker"></label>
                 <button onclick="toggleWireframe()">Toggle Wireframe</button>
+            </div>
+        </div>
+
+        <button class="accordion" id="textSettingsAccordion">Text Settings</button>
+        <div class="panel" id="textSettingsPanel">
+            <div class="control-group">
+                <label>Text Content: <input type="text" id="textContent" value="Pixo"></label>
+                <button onclick="updateTextContent()">Update Text</button>
+            </div>
+            <div class="control-group">
+                <label>Text Color: <input type="color" id="textColor" value="#ffffff"></label>
+            </div>
+            <div class="control-group">
+                <label>Stroke Color: <input type="color" id="strokeColor" value="#000000"></label>
+            </div>
+            <div class="control-group">
+                <label>Stroke Width: 
+                    <input type="range" id="strokeWidth" min="0" max="0.1" step="0.001" value="0.02">
+                    <input type="number" id="strokeWidthValue" min="0" max="0.1" step="0.001" value="0.02">
+                </label>
+            </div>
+            <div class="control-group">
+                <label>Size: 
+                    <input type="range" id="textSize" min="0.1" max="2" step="0.1" value="0.5">
+                    <input type="number" id="textSizeValue" min="0.1" max="2" step="0.1" value="0.5">
+                </label>
+            </div>
+            <div class="control-group">
+                <label>Height: 
+                    <input type="range" id="textHeight" min="0" max="0.5" step="0.01" value="0.1">
+                    <input type="number" id="textHeightValue" min="0" max="0.5" step="0.01" value="0.1">
+                </label>
             </div>
         </div>
 
@@ -259,6 +295,8 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FontLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/geometries/TextGeometry.js"></script>
     <script>
         let scene, camera, renderer, controls;
         let selectedObject = null;
@@ -266,6 +304,7 @@
         let currentFileName = null;
         let directionalLight, ambientLight;
         let lightHelper;
+        let font = null;
 
         function init() {
             scene = new THREE.Scene();
@@ -383,6 +422,38 @@
             document.getElementById('ambientIntensityValue').value = 0.4;
 
             document.getElementById('colorPicker').addEventListener('input', updateColor);
+            document.getElementById('textColor').addEventListener('input', updateTextColor);
+            document.getElementById('strokeColor').addEventListener('input', updateStrokeColor);
+            
+            // Text size controls
+            document.getElementById('textSize').addEventListener('input', function() {
+                document.getElementById('textSizeValue').value = this.value;
+                updateTextGeometry();
+            });
+            document.getElementById('textSizeValue').addEventListener('input', function() {
+                document.getElementById('textSize').value = this.value;
+                updateTextGeometry();
+            });
+            
+            // Text height controls
+            document.getElementById('textHeight').addEventListener('input', function() {
+                document.getElementById('textHeightValue').value = this.value;
+                updateTextGeometry();
+            });
+            document.getElementById('textHeightValue').addEventListener('input', function() {
+                document.getElementById('textHeight').value = this.value;
+                updateTextGeometry();
+            });
+            
+            // Stroke width controls
+            document.getElementById('strokeWidth').addEventListener('input', function() {
+                document.getElementById('strokeWidthValue').value = this.value;
+                updateTextGeometry();
+            });
+            document.getElementById('strokeWidthValue').addEventListener('input', function() {
+                document.getElementById('strokeWidth').value = this.value;
+                updateTextGeometry();
+            });
             
             // Position sliders and number inputs
             document.getElementById('posX').addEventListener('input', function() {
@@ -444,7 +515,19 @@
 
             renderer.domElement.addEventListener('click', onCanvasClick);
 
-            animate();
+            // Load font for text objects
+            const fontLoader = new THREE.FontLoader();
+            fontLoader.load('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/fonts/helvetiker_regular.typeface.json', 
+                function(loadedFont) {
+                    font = loadedFont;
+                    animate();
+                },
+                undefined,
+                function(error) {
+                    console.error('Error loading font:', error);
+                    animate();
+                }
+            );
         }
 
         function updateLightHelperPosition() {
@@ -578,6 +661,16 @@
                         wireframe: obj.material.wireframe
                     };
                     
+                    // Add text-specific properties if this is a text object
+                    if (obj.userData.isText) {
+                        objectData.textContent = obj.userData.textContent;
+                        objectData.textColor = obj.userData.textColor;
+                        objectData.strokeColor = obj.userData.strokeColor;
+                        objectData.strokeWidth = obj.userData.strokeWidth;
+                        objectData.textSize = obj.userData.textSize;
+                        objectData.textHeight = obj.userData.textHeight;
+                    }
+                    
                     objects.push(objectData);
                 }
             });
@@ -610,7 +703,48 @@
             // Add objects
             data.objects.forEach(objData => {
                 let geometry;
+                let material;
                 
+                if (objData.type === 'TextGeometry') {
+                    // Handle text objects
+                    if (!font) {
+                        console.warn('Font not loaded, cannot create text object');
+                        return;
+                    }
+                    
+                    const textGeometry = new THREE.TextGeometry(objData.textContent || "Pixo", {
+                        font: font,
+                        size: objData.textSize || 0.5,
+                        height: objData.textHeight || 0.1,
+                        curveSegments: 12,
+                        bevelEnabled: true,
+                        bevelThickness: objData.strokeWidth || 0.02,
+                        bevelSize: objData.strokeWidth || 0.02
+                    });
+                    
+                    material = new THREE.MeshPhongMaterial({
+                        color: objData.textColor || 0xffffff,
+                        wireframe: objData.wireframe
+                    });
+                    
+                    const textMesh = new THREE.Mesh(textGeometry, material);
+                    textMesh.position.set(objData.position.x, objData.position.y, objData.position.z);
+                    textMesh.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
+                    textMesh.userData = {
+                        isText: true,
+                        textContent: objData.textContent || "Pixo",
+                        textColor: objData.textColor || 0xffffff,
+                        strokeColor: objData.strokeColor || 0x000000,
+                        strokeWidth: objData.strokeWidth || 0.02,
+                        textSize: objData.textSize || 0.5,
+                        textHeight: objData.textHeight || 0.1
+                    };
+                    
+                    scene.add(textMesh);
+                    return;
+                }
+                
+                // Handle other object types
                 switch(objData.type) {
                     case 'BoxGeometry':
                         geometry = new THREE.BoxGeometry(1, 1, 1);
@@ -626,7 +760,7 @@
                         return;
                 }
                 
-                const material = new THREE.MeshPhongMaterial({
+                material = new THREE.MeshPhongMaterial({
                     color: objData.color,
                     wireframe: objData.wireframe
                 });
@@ -705,9 +839,108 @@
             updateControls();
         }
 
+        function addText() {
+            if (!font) {
+                alert('Font not loaded yet. Please wait a moment and try again.');
+                return;
+            }
+            
+            const textGeometry = new THREE.TextGeometry("Pixo", {
+                font: font,
+                size: 0.5,
+                height: 0.1,
+                curveSegments: 12,
+                bevelEnabled: true,
+                bevelThickness: 0.02,
+                bevelSize: 0.02
+            });
+            
+            const textMaterial = new THREE.MeshPhongMaterial({ color: 0xffffff });
+            const textMesh = new THREE.Mesh(textGeometry, textMaterial);
+            
+            // Store text-specific data
+            textMesh.userData = {
+                isText: true,
+                textContent: "Pixo",
+                textColor: 0xffffff,
+                strokeColor: 0x000000,
+                strokeWidth: 0.02,
+                textSize: 0.5,
+                textHeight: 0.1
+            };
+            
+            scene.add(textMesh);
+            selectedObject = textMesh;
+            updateFrames();
+            updateControls();
+        }
+
+        function updateTextContent() {
+            if (selectedObject && selectedObject.userData.isText) {
+                const newText = document.getElementById('textContent').value;
+                if (newText && newText !== selectedObject.userData.textContent) {
+                    selectedObject.userData.textContent = newText;
+                    updateTextGeometry();
+                }
+            }
+        }
+
+        function updateTextGeometry() {
+            if (selectedObject && selectedObject.userData.isText) {
+                const textData = selectedObject.userData;
+                
+                const textGeometry = new THREE.TextGeometry(textData.textContent, {
+                    font: font,
+                    size: parseFloat(document.getElementById('textSize').value),
+                    height: parseFloat(document.getElementById('textHeight').value),
+                    curveSegments: 12,
+                    bevelEnabled: true,
+                    bevelThickness: parseFloat(document.getElementById('strokeWidth').value),
+                    bevelSize: parseFloat(document.getElementById('strokeWidth').value)
+                });
+                
+                // Keep the same material
+                const material = selectedObject.material;
+                
+                // Update the mesh
+                scene.remove(selectedObject);
+                const newMesh = new THREE.Mesh(textGeometry, material);
+                newMesh.position.copy(selectedObject.position);
+                newMesh.scale.copy(selectedObject.scale);
+                newMesh.rotation.copy(selectedObject.rotation);
+                newMesh.userData = {
+                    isText: true,
+                    textContent: textData.textContent,
+                    textColor: textData.textColor,
+                    strokeColor: textData.strokeColor,
+                    strokeWidth: parseFloat(document.getElementById('strokeWidth').value),
+                    textSize: parseFloat(document.getElementById('textSize').value),
+                    textHeight: parseFloat(document.getElementById('textHeight').value)
+                };
+                
+                scene.add(newMesh);
+                selectedObject = newMesh;
+                updateFrames();
+            }
+        }
+
         function updateColor(e) {
-            if (selectedObject) {
+            if (selectedObject && !selectedObject.userData.isText) {
                 selectedObject.material.color.set(e.target.value);
+            }
+        }
+
+        function updateTextColor(e) {
+            if (selectedObject && selectedObject.userData.isText) {
+                selectedObject.material.color.set(e.target.value);
+                selectedObject.userData.textColor = new THREE.Color(e.target.value).getHex();
+            }
+        }
+
+        function updateStrokeColor(e) {
+            if (selectedObject && selectedObject.userData.isText) {
+                selectedObject.userData.strokeColor = new THREE.Color(e.target.value).getHex();
+                updateTextGeometry();
             }
         }
 
@@ -776,6 +1009,33 @@
                 document.getElementById('scaleZValue').value = selectedObject.scale.z;
                 
                 document.getElementById('colorPicker').value = `#${selectedObject.material.color.getHexString()}`;
+                
+                // Update text controls if selected object is text
+                const textSettingsAccordion = document.getElementById('textSettingsAccordion');
+                const textSettingsPanel = document.getElementById('textSettingsPanel');
+                
+                if (selectedObject.userData.isText) {
+                    textSettingsAccordion.style.display = 'block';
+                    
+                    // Expand the text settings panel
+                    textSettingsAccordion.classList.add('active');
+                    textSettingsPanel.style.maxHeight = textSettingsPanel.scrollHeight + "px";
+                    
+                    // Update text controls
+                    document.getElementById('textContent').value = selectedObject.userData.textContent;
+                    document.getElementById('textColor').value = `#${selectedObject.userData.textColor.toString(16).padStart(6, '0')}`;
+                    document.getElementById('strokeColor').value = `#${selectedObject.userData.strokeColor.toString(16).padStart(6, '0')}`;
+                    document.getElementById('strokeWidth').value = selectedObject.userData.strokeWidth;
+                    document.getElementById('strokeWidthValue').value = selectedObject.userData.strokeWidth;
+                    document.getElementById('textSize').value = selectedObject.userData.textSize;
+                    document.getElementById('textSizeValue').value = selectedObject.userData.textSize;
+                    document.getElementById('textHeight').value = selectedObject.userData.textHeight;
+                    document.getElementById('textHeightValue').value = selectedObject.userData.textHeight;
+                } else {
+                    textSettingsAccordion.style.display = 'none';
+                    textSettingsAccordion.classList.remove('active');
+                    textSettingsPanel.style.maxHeight = null;
+                }
             }
         }
 
@@ -801,56 +1061,56 @@
         }
 
         function resetScene() {
-  // 1) Mesh と LineSegments (エッジヘルパー) をまとめて削除  
-  scene.children.slice().forEach(obj => {
-    if (obj.isMesh || obj.type === "LineSegments") {
-      scene.remove(obj);
-    }
-  });
+            // 1) Mesh と LineSegments (エッジヘルパー) をまとめて削除  
+            scene.children.slice().forEach(obj => {
+                if (obj.isMesh || obj.type === "LineSegments") {
+                    scene.remove(obj);
+                }
+            });
 
-  // 選択オブジェクトをリセット  
-  selectedObject = null;
+            // 選択オブジェクトをリセット  
+            selectedObject = null;
 
-  // フレームヘルパー配列もクリア  
-  frameHelpers.forEach(helper => {
-    if (helper.parent) helper.parent.remove(helper);
-  });
-  frameHelpers = [];
+            // フレームヘルパー配列もクリア  
+            frameHelpers.forEach(helper => {
+                if (helper.parent) helper.parent.remove(helper);
+            });
+            frameHelpers = [];
 
-  // 2) 古い GridHelper を全部削除  
-  scene.children.slice().forEach(obj => {
-    if (obj instanceof THREE.GridHelper) {
-      scene.remove(obj);
-    }
-  });
+            // 2) 古い GridHelper を全部削除  
+            scene.children.slice().forEach(obj => {
+                if (obj instanceof THREE.GridHelper) {
+                    scene.remove(obj);
+                }
+            });
 
-  // 新規にグリッドを追加  
-  const gridHelper = new THREE.GridHelper(20, 20);
-  scene.add(gridHelper);
+            // 新規にグリッドを追加  
+            const gridHelper = new THREE.GridHelper(20, 20);
+            scene.add(gridHelper);
 
-  // 3) ライトをデフォルト値に戻す  
-  directionalLight.position.set(5, 5, 5);
-  directionalLight.color.set(0xffffff);
-  directionalLight.intensity = 1;
+            // 3) ライトをデフォルト値に戻す  
+            directionalLight.position.set(5, 5, 5);
+            directionalLight.color.set(0xffffff);
+            directionalLight.intensity = 1;
 
-  ambientLight.color.set(0x404040);
-  ambientLight.intensity = 0.4;
+            ambientLight.color.set(0x404040);
+            ambientLight.intensity = 0.4;
 
-  // UI 側のライト設定も初期化  
-  document.getElementById('lightType').value = 'both';
-  changeLightType();
+            // UI 側のライト設定も初期化  
+            document.getElementById('lightType').value = 'both';
+            changeLightType();
 
-  ['X','Y','Z'].forEach(axis => {
-    document.getElementById(`lightPos${axis}`).value = 5;
-    document.getElementById(`lightPos${axis}Value`).value = 5;
-  });
-  document.getElementById('lightIntensity').value = 1;
-  document.getElementById('lightIntensityValue').value = 1;
-  document.getElementById('lightColor').value = '#ffffff';
-  document.getElementById('ambientIntensity').value = 0.4;
-  document.getElementById('ambientIntensityValue').value = 0.4;
-  document.getElementById('ambientColor').value = '#404040';
-}
+            ['X','Y','Z'].forEach(axis => {
+                document.getElementById(`lightPos${axis}`).value = 5;
+                document.getElementById(`lightPos${axis}Value`).value = 5;
+            });
+            document.getElementById('lightIntensity').value = 1;
+            document.getElementById('lightIntensityValue').value = 1;
+            document.getElementById('lightColor').value = '#ffffff';
+            document.getElementById('ambientIntensity').value = 0.4;
+            document.getElementById('ambientIntensityValue').value = 0.4;
+            document.getElementById('ambientColor').value = '#404040';
+        }
 
         function animate() {
             requestAnimationFrame(animate);
